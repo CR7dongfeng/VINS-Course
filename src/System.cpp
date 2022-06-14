@@ -127,6 +127,8 @@ void System::PubImageData(double dStampSec, Mat &img)
                     feature_points->id_of_point.push_back(p_id * NUM_OF_CAM + i);
                     feature_points->u_of_point.push_back(cur_pts[j].x);
                     feature_points->v_of_point.push_back(cur_pts[j].y);
+                    // 这个速度是特征的像素速度，主要是用来处理IMU和图像时间戳不对齐问题
+                    // 这里不用考虑这个问题，有兴趣可以读一下QinTong 08年的
                     feature_points->velocity_x_of_point.push_back(pts_velocity[j].x);
                     feature_points->velocity_y_of_point.push_back(pts_velocity[j].y);
                 }
@@ -318,7 +320,7 @@ void System::ProcessBackEnd()
             for (unsigned int i = 0; i < img_msg->points.size(); i++) 
             {
                 int v = img_msg->id_of_point[i] + 0.5;
-                int feature_id = v / NUM_OF_CAM;
+                int feature_id = v / NUM_OF_CAM;   // NUM_OF_CAM, 单目1, 双目2
                 int camera_id = v % NUM_OF_CAM;
                 double x = img_msg->points[i].x();
                 double y = img_msg->points[i].y();

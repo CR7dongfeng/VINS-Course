@@ -102,6 +102,7 @@ void Estimator::clearState()
     drift_correct_t = Vector3d::Zero();
 }
 
+// 这里面不但进行了与积分，还对PVQ进行了预测
 void Estimator::processIMU(double dt, const Vector3d &linear_acceleration, const Vector3d &angular_velocity)
 {
     if (!first_imu)
@@ -142,6 +143,11 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
 {
     //ROS_DEBUG("new image coming ------------------------------------------");
     // cout << "Adding feature points: " << image.size()<<endl;
+    /**
+     * 判断两张图像相对运动了多少个像素，如果超过一定的阈值，就认为是一个关键帧，此时需要marge老关键帧
+     * 如果静止不动，或者运动不够，它就会把它前面邻接的关键帧marge掉，或者叫marge掉次新帧
+     * 也就是 ： marge老帧 VS marge次新帧
+     */
     if (f_manager.addFeatureCheckParallax(frame_count, image, td))
         marginalization_flag = MARGIN_OLD;
     else
@@ -158,6 +164,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
     all_image_frame.insert(make_pair(header, imageframe));
     tmp_pre_integration = new IntegrationBase{acc_0, gyr_0, Bas[frame_count], Bgs[frame_count]};
 
+    // 等于2，说明外参一无所知，需要进行标定
     if (ESTIMATE_EXTRINSIC == 2)
     {
         cout << "calibrating extrinsic param, rotation movement is needed" << endl;
@@ -185,9 +192,10 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
             if (ESTIMATE_EXTRINSIC != 2 && (header - initial_timestamp) > 0.1)
             {
                 // cout << "1 initialStructure" << endl;
-                result = initialStructure();
+                result = initialStructure();  // 初始化的各个公式有详细讲解，这里就不用费劲了
                 initial_timestamp = header;
             }
+            // 初始化完成后，result变为true，整个问题就变为非线性优化问题
             if (result)
             {
                 solver_flag = NON_LINEAR;
@@ -209,6 +217,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
     else
     {
         TicToc t_solve;
+        // Odometry : 里程计，不断推测相机在三维空间中的姿态
         solveOdometry();
         //ROS_DEBUG("solver costs: %fms", t_solve.toc());
 
@@ -495,6 +504,8 @@ void Estimator::solveOdometry()
         return;
     if (solver_flag == NON_LINEAR)
     {
+        // odometry首先进行三角化，因为我们只有归一化平面坐标里面的一些点，还不知道特征点在三维空间的表示
+        // 三角化结束之后就进入后端的优化
         TicToc t_tri;
         f_manager.triangulate(Ps, tic, ric);
         //cout << "triangulation costs : " << t_tri.toc() << endl;        
@@ -1036,6 +1047,7 @@ void Estimator::problemSolve()
 
     problem.Solve(10);
 
+    // 求解完之后我们又会需要一些先验的操作，所以我们把一些先验的数据保存下来
     // update bprior_,  Hprior_ do not need update
     if (Hprior_.rows() > 0)
     {
@@ -1075,11 +1087,13 @@ void Estimator::problemSolve()
 void Estimator::backendOptimization()
 {
     TicToc t_solver;
+    // vector和double转换是为了适应ceres的结构，都是数组和指针
     // 借助 vins 框架，维护变量
     vector2double();
     // 构建求解器
     problemSolve();
     // 优化后的变量处理下自由度
+    // 这个里面包含了一些修正，如果没有它，系统是乱飘的。如果没有给系统加强先验的话，系统的零空间会飘逸掉
     double2vector();
     //ROS_INFO("whole time for solver: %f", t_solver.toc());
 

@@ -84,6 +84,10 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
     TicToc t_r;
     cur_time = _cur_time;
 
+    /**
+     * @brief Construct a new if object
+     * trick：把图像进行一个直方图均衡，把明暗亮度调整一下，使之更适合提取亮度变化情况下的特征
+     */
     if (EQUALIZE)
     {
         cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(3.0, cv::Size(8, 8));
@@ -105,6 +109,7 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
 
     forw_pts.clear();
 
+    // 进行特征跟踪及新特征的提取
     if (cur_pts.size() > 0)
     {
         TicToc t_o;
@@ -138,6 +143,7 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
         //ROS_DEBUG("detect feature begins");
         TicToc t_t;
         int n_max_cnt = MAX_CNT - static_cast<int>(forw_pts.size());
+        // 已经提取的像素区域打上mask，在之前没有提取的区域继续进行新特征的提取操作
         if (n_max_cnt > 0)
         {
             if(mask.empty())
@@ -162,6 +168,7 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
     prev_un_pts = cur_un_pts;
     cur_img = forw_img;
     cur_pts = forw_pts;
+    // 以上都是在像素层面的坐标。除此之外，我们还需要一些归一化像素平面的去畸变的x,y,1坐标
     undistortedPoints();
     prev_time = cur_time;
 }
